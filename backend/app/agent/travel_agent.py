@@ -2,38 +2,40 @@ import json
 import re
 from app.models import TripRequest, ItineraryResponse
 from app.services import mock_providers, ranking
-from app.llm import gemini_client, prompts
+from app.llm import openai_client, prompts
 
 async def plan_trip(request: TripRequest) -> ItineraryResponse:
-    # 1. Get Options
+    # 1. Get Options (Python "Tools")
+    # We fetch the data first, then give it to the AI.
     flights = mock_providers.get_flight_options(request.origin, request.destination)
     hotels = []
     if request.need_hotel:
         hotels = mock_providers.get_hotel_options(request.destination)
 
-    # 2. Heuristic Sorting
+    # 2. Heuristic Sorting (Optional helper)
     flights, hotels = ranking.sort_options(flights, hotels, request.budget)
 
-    # 3. Construct Prompt
+    # 3. Construct Prompt with Data
     context = {
         "request": request.dict(),
         "available_flights": [f.dict() for f in flights],
         "available_hotels": [h.dict() for h in hotels]
     }
     
+    # We dump the data into JSON so the LLM can read it
     user_prompt = f"Please select the best itinerary from this data:\n{json.dumps(context, indent=2)}"
 
-    # 4. Call LLM
-    llm_response_str = await gemini_client.call_llm(prompts.SYSTEM_PROMPT, user_prompt)
+    # 4. Call OpenAI
+    # The 'openai_client' handles the connection and returns a string
+    llm_response_str = await openai_client.call_llm(prompts.SYSTEM_PROMPT, user_prompt)
     
-    # DEBUG: Print response to terminal to see what Gemini sent
+    # DEBUG: Print exactly what OpenAI sent back
     print(f"\n--- DEBUG LLM RESPONSE ---\n{llm_response_str}\n--------------------------\n")
 
-    # 5. Parse LLM Selection
+    # 5. Parse OpenAI Selection
     try:
-        # Clean up Markdown code blocks if present
         clean_str = llm_response_str.strip()
-        # Remove ```json and ``` wrapper if they exist
+        # Remove Markdown (```json ... ```) if OpenAI adds it
         match = re.search(r"```json\s*(.*?)\s*```", clean_str, re.DOTALL)
         if match:
             clean_str = match.group(1)
@@ -42,19 +44,18 @@ async def plan_trip(request: TripRequest) -> ItineraryResponse:
 
         selection = json.loads(clean_str)
         
-        # Find the actual objects based on IDs selected by LLM
-        # Default to first option if ID not found (fallback)
+        # 6. Map IDs back to Objects
+        # We look up the flight ID the AI picked in our list
         selected_flight = next((f for f in flights if f.id == selection.get("selected_flight_id")), flights[0])
         
         selected_hotel = None
         hotel_cost = 0
-        
         if request.need_hotel:
-            # Try to find selected hotel, default to first if missing
             hid = selection.get("selected_hotel_id")
             if hid:
                 selected_hotel = next((h for h in hotels if h.id == hid), hotels[0])
             else:
+                # Fallback if AI picked an invalid hotel ID
                 selected_hotel = hotels[0] if hotels else None
                 
             if selected_hotel:
@@ -71,7 +72,7 @@ async def plan_trip(request: TripRequest) -> ItineraryResponse:
 
     except Exception as e:
         print(f"Error parsing LLM response: {e}")
-        # Fallback if LLM fails: return the cheapest options (first in sorted list)
+        # Fallback Strategy: Return the cheapest options if AI fails
         fallback_flight = flights[0]
         fallback_hotel = hotels[0] if hotels else None
         return ItineraryResponse(
