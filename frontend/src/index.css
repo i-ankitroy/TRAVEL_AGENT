@@ -1,0 +1,25 @@
+/* src/index.css */
+:root {
+  --primary: #6d28d9;       /* Deep Purple */
+  --primary-hover: #5b21b6; /* Darker Purple */
+  --secondary: #ede9fe;     /* Very Light Purple for backgrounds */
+  --accent: #8b5cf6;        /* Bright Purple for highlights */
+  --bg-color: #f8fafc;      /* Clean White/Grey Background */
+  --text-dark: #1e293b;
+  --text-light: #64748b;
+  --white: #ffffff;
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --radius: 16px;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-dark);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
